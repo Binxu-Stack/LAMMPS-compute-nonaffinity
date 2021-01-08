@@ -1,0 +1,30 @@
+
+  units           lj
+  dimension       2
+  atom_style    atomic
+
+  read_data ./data.pos
+
+  pair_style lj/smooth 2.0 2.5
+  variable sigmass equal "2*sin(PI/10.0)"
+  variable sigmall equal "2*sin(PI/5.0)"
+  variable sigmasl equal "1.0"
+  variable epsilonss equal "0.5"
+  variable epsilonll equal "0.5"
+  variable epsilonsl equal "1.0"
+  pair_coeff 1 1 ${epsilonss} ${sigmass}
+  pair_coeff 2 2 ${epsilonll} ${sigmall}
+  pair_coeff 1 2 ${epsilonsl} ${sigmasl}
+  pair_modify shift yes
+  fix 1 all enforce2d
+
+  variable strain equal xy/ly
+  thermo_style custom pe vol v_strain
+  reset_timestep  0
+
+  thermo_modify norm no
+  #fix             1 all nve
+  #minimize   0 1e-8 5000 5000
+
+include ./nonaffinity.lmp
+           

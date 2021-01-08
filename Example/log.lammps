@@ -1,0 +1,123 @@
+LAMMPS (3 Mar 2020)
+
+  units           lj
+  dimension       2
+  atom_style    atomic
+
+  read_data ./data.pos
+  triclinic box = (0 0 -0.098805) to (98.8045 98.8045 0.098805) with tilt (3.06096 0 0)
+  1 by 1 by 1 MPI processor grid
+  reading atoms ...
+  10000 atoms
+  read_data CPU = 0.00683689 secs
+
+  pair_style lj/smooth 2.0 2.5
+  variable sigmass equal "2*sin(PI/10.0)"
+  variable sigmall equal "2*sin(PI/5.0)"
+  variable sigmasl equal "1.0"
+  variable epsilonss equal "0.5"
+  variable epsilonll equal "0.5"
+  variable epsilonsl equal "1.0"
+  pair_coeff 1 1 ${epsilonss} ${sigmass}
+  pair_coeff 1 1 0.5 ${sigmass}
+  pair_coeff 1 1 0.5 0.618033988749895
+  pair_coeff 2 2 ${epsilonll} ${sigmall}
+  pair_coeff 2 2 0.5 ${sigmall}
+  pair_coeff 2 2 0.5 1.17557050458495
+  pair_coeff 1 2 ${epsilonsl} ${sigmasl}
+  pair_coeff 1 2 1 ${sigmasl}
+  pair_coeff 1 2 1 1
+  pair_modify shift yes
+  fix 1 all enforce2d
+
+  variable strain equal xy/ly
+  thermo_style custom pe vol v_strain
+  reset_timestep  0
+
+  thermo_modify norm no
+  #fix             1 all nve
+  #minimize   0 1e-8 5000 5000
+
+include ./nonaffinity.lmp
+
+  run 0
+Neighbor list info ...
+  update every 1 steps, delay 10 steps, check yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 2.8
+  ghost atom cutoff = 2.8
+  binsize = 1.4, bins = 73 71 1
+  1 neighbor lists, perpetual/occasional/extra = 1 0 0
+  (1) pair lj/smooth, perpetual
+      attributes: half, newton on
+      pair build: half/bin/newton/tri
+      stencil: half/bin/2d/newton/tri
+      bin: standard
+Per MPI rank memory allocation (min/avg/max) = 3.561 | 3.561 | 3.561 Mbytes
+PotEng Volume v_strain 
+  -23933.269    9762.3292  0.030979965 
+Loop time of 9.53674e-07 on 1 procs for 0 steps with 10000 atoms
+
+209.7% CPU use with 1 MPI tasks x no OpenMP threads
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 0          | 0          | 0          |   0.0 |  0.00
+Neigh   | 0          | 0          | 0          |   0.0 |  0.00
+Comm    | 0          | 0          | 0          |   0.0 |  0.00
+Output  | 0          | 0          | 0          |   0.0 |  0.00
+Modify  | 0          | 0          | 0          |   0.0 |  0.00
+Other   |            | 9.537e-07  |            |       |100.00
+
+Nlocal:    10000 ave 10000 max 10000 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Nghost:    1163 ave 1163 max 1163 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Neighs:    120230 ave 120230 max 120230 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+
+Total # of neighbors = 120230
+Ave neighs/atom = 12.023
+Neighbor list builds = 0
+Dangerous builds = 0
+  mass * 1
+  compute NONAFF all nonaffinity 1e-11 derivatives.dat Atomic_shear_nonaffinity.dat
+
+  # thermo to trigger hessian calculation
+  # eigens and eigenvector will be output
+  thermo_style custom step c_NONAFF[1]
+WARNING: New thermo_style command, previous thermo_modify settings will be lost (../output.cpp:708)
+  run 0
+Per MPI rank memory allocation (min/avg/max) = 3.561 | 3.561 | 3.561 Mbytes
+Step c_NONAFF[1] 
+       0 4.6824633e-310 
+Loop time of 0.000728369 on 1 procs for 0 steps with 10000 atoms
+
+18.8% CPU use with 1 MPI tasks x no OpenMP threads
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 0          | 0          | 0          |   0.0 |  0.00
+Neigh   | 0          | 0          | 0          |   0.0 |  0.00
+Comm    | 0          | 0          | 0          |   0.0 |  0.00
+Output  | 0          | 0          | 0          |   0.0 |  0.00
+Modify  | 0          | 0          | 0          |   0.0 |  0.00
+Other   |            | 0.0007284  |            |       |100.00
+
+Nlocal:    10000 ave 10000 max 10000 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Nghost:    1163 ave 1163 max 1163 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Neighs:    120230 ave 120230 max 120230 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+
+Total # of neighbors = 120230
+Ave neighs/atom = 12.023
+Neighbor list builds = 0
+Dangerous builds = 0
+
+
+
+Total wall time: 0:34:07
