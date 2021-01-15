@@ -1,7 +1,7 @@
 
   run 0
   mass * 1
-  compute NONAFF all nonaffinity 1e-11 derivatives.dat Atomic_shear_nonaffinity.dat
+  compute NONAFF all nonaffinity 1e-3 derivatives.dat Atomic_shear_nonaffinity.dat
 
   # thermo to trigger hessian calculation
   # eigens and eigenvector will be output

@@ -9,7 +9,7 @@ LAMMPS (3 Mar 2020)
   1 by 1 by 1 MPI processor grid
   reading atoms ...
   10000 atoms
-  read_data CPU = 0.00683689 secs
+  read_data CPU = 0.00826669 secs
 
   pair_style lj/smooth 2.0 2.5
   variable sigmass equal "2*sin(PI/10.0)"
@@ -58,7 +58,7 @@ PotEng Volume v_strain
   -23933.269    9762.3292  0.030979965 
 Loop time of 9.53674e-07 on 1 procs for 0 steps with 10000 atoms
 
-209.7% CPU use with 1 MPI tasks x no OpenMP threads
+314.6% CPU use with 1 MPI tasks x no OpenMP threads
 
 MPI task timing breakdown:
 Section |  min time  |  avg time  |  max time  |%varavg| %total
@@ -82,7 +82,7 @@ Ave neighs/atom = 12.023
 Neighbor list builds = 0
 Dangerous builds = 0
   mass * 1
-  compute NONAFF all nonaffinity 1e-11 derivatives.dat Atomic_shear_nonaffinity.dat
+  compute NONAFF all nonaffinity 1e-3 derivatives.dat Atomic_shear_nonaffinity.dat
 
   # thermo to trigger hessian calculation
   # eigens and eigenvector will be output
@@ -91,10 +91,10 @@ WARNING: New thermo_style command, previous thermo_modify settings will be lost 
   run 0
 Per MPI rank memory allocation (min/avg/max) = 3.561 | 3.561 | 3.561 Mbytes
 Step c_NONAFF[1] 
-       0 4.6824633e-310 
-Loop time of 0.000728369 on 1 procs for 0 steps with 10000 atoms
+       0 4.6450998e-310 
+Loop time of 1.19209e-06 on 1 procs for 0 steps with 10000 atoms
 
-18.8% CPU use with 1 MPI tasks x no OpenMP threads
+335.5% CPU use with 1 MPI tasks x no OpenMP threads
 
 MPI task timing breakdown:
 Section |  min time  |  avg time  |  max time  |%varavg| %total
@@ -104,7 +104,7 @@ Neigh   | 0          | 0          | 0          |   0.0 |  0.00
 Comm    | 0          | 0          | 0          |   0.0 |  0.00
 Output  | 0          | 0          | 0          |   0.0 |  0.00
 Modify  | 0          | 0          | 0          |   0.0 |  0.00
-Other   |            | 0.0007284  |            |       |100.00
+Other   |            | 1.192e-06  |            |       |100.00
 
 Nlocal:    10000 ave 10000 max 10000 min
 Histogram: 1 0 0 0 0 0 0 0 0 0
@@ -120,4 +120,4 @@ Dangerous builds = 0
 
 
 
-Total wall time: 0:34:07
+Total wall time: 0:32:31

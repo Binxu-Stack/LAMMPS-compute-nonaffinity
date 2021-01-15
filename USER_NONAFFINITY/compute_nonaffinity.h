@@ -43,6 +43,7 @@ namespace LAMMPS_NS {
     double *hessian;
   
     double epsilon, iepsilon;
+    //double eps;
   
     int pair_compute_flag;
     int kspace_compute_flag;
@@ -59,6 +60,7 @@ namespace LAMMPS_NS {
     char* derivative_file;
     char* nonaffinity_file;
     double * eigen;
+    double * f_xxx;
     double * xy_nonaffinity;
     double * pxx_x;
     double * pyy_x;
@@ -71,7 +73,7 @@ namespace LAMMPS_NS {
     double ** press;
     void allocate();
     void solve_stress_gradient();
-    double energy_press();
+    double energy_press(int);
     class Compute *pe_compute;
     class Compute *press_compute;
   };

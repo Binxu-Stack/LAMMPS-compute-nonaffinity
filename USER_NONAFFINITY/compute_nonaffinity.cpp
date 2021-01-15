@@ -43,6 +43,7 @@ http://bitbucket.org/numericalsolutions/lammps-hessian
 #include "error.h"
 #include "force.h"
 #include "improper.h"
+#include "irregular.h"
 #include "compute.h"
 #include "stdio.h"
 #include "math.h"
@@ -68,6 +69,7 @@ http://bitbucket.org/numericalsolutions/lammps-hessian
 //#define DEBUG
 
 #define MAXLINE 256
+#define PI 3.141592653589793238462643383279
 using namespace LAMMPS_NS;
 
 #ifdef MKL
@@ -89,7 +91,10 @@ ComputeNonaffinity::ComputeNonaffinity(LAMMPS *lmp, int narg, char **arg)
   if (narg != 6)
     error->all(FLERR, "Illegal compute hessian command");
 
+  //eps = atof(arg[3]);
+  //if(eps < 1e-3) error->all(FLERR,"eps two small!");
   epsilon = atof(arg[3]);
+  //epsilon = 1e-11;
   //printf("Epsilon: %g\n",epsilon);
   iepsilon = 1 / epsilon;
   memory->create(derivative_file, strlen(arg[4])+1, "Compute_nonafinity:derivative_file");
@@ -424,6 +429,68 @@ void ComputeNonaffinity::solve_nonaffinity(){
       error->all(FLERR, str);
     }
   }
+  /* Solve the orientation of each mode */
+  // NOTE: only two dimension is considered currently
+  // calculate the maximum nonaffine shear modulus and softest orientation for each mode
+  double * max_nonaffine_modulus_modes;
+  //double * max_nonaffine_disp_modes;
+  double * theta_softest;
+  memory->create(max_nonaffine_modulus_modes, ndof, "nonaffine_modulus_modes");
+  memory->create(theta_softest, ndof, "theta_softest");
+  for (int i = 0; i < ndof; ++i){
+    double tau_max_square, tmp_softest, tau_max,tan_2theta_max;
+    tau_max_square = (pxx_x[i]-pyy_x[i])*(pxx_x[i]-pyy_x[i])*0.25+pxy_x[i]*pxy_x[i];
+    max_nonaffine_modulus_modes[i] = volume / eigen[i] * tau_max_square;
+    //max_nonaffine_disp_modes[i] = volume / eigen[i] * sqrt(tau_max_square);
+    tan_2theta_max = -(pxx_x[i]-pyy_x[i])*0.5/pxy_x[i];
+    tmp_softest = atan(tan_2theta_max)*0.5;
+    // confine orientation in region [0,pi]
+    if(tmp_softest < 0.0) tmp_softest += PI*0.5;
+    tau_max = (pxx_x[i]-pyy_x[i])*0.5*sin(2.*tmp_softest)-pxy_x[i]*cos(2.*tmp_softest);
+    // Choose the one softest diection in the two soft direction
+    if (f_xxx[i]*tau_max>0.){
+      theta_softest[i] = tmp_softest;
+    }else{
+      theta_softest[i] = tmp_softest + PI*0.5;
+    }
+  }
+
+  // find our the mode that dominate the nonaffine shear modulus of each atom
+  int * max_index; // dominate mode index
+  double * max_value; // max_nonaffine_modulus_modes of dominate mode
+  int natoms = atom->natoms;
+  memory->create(max_index, natoms, "max_index");
+  memory->create(max_value, natoms, "max_value");
+  for (int i = 0; i < natoms; ++i) {
+    max_value[i] = 0.0;
+  }
+  double tmp;
+  double tmp2;
+  //for (int i = domain->dimension; i < ndof; ++i) {
+  for (int i = 0; i < ndof; ++i) {
+    for (int j = 0; j < natoms; ++j) {
+      // only for 2D
+      // maximum nonaffine modulus contribution of one mode
+      tmp = hessian[i*ndof+j*2]*hessian[i*ndof+j*2]*max_nonaffine_modulus_modes[i] + hessian[i*ndof+j*2+1]*hessian[i*ndof+j*2+1]*max_nonaffine_modulus_modes[i];
+      if (tmp > max_value[j]){
+	max_value[j] = tmp;
+	max_index[j] = i;
+      }
+    }
+  }
+
+  // Print out softest shear orientation of each atom
+  FILE *out_orientation;
+  out_orientation = fopen("Orientation.dat","w");
+  fprintf(out_orientation,"# theta (rad) index_of_mode\n");
+  for (int i = 0; i < natoms; ++ i) {
+    double theta,second_theta,first,second,ratio;
+    theta = theta_softest[max_index[i]];
+    fprintf(out_orientation,"%16g %i\n",theta, max_index[i]);
+  }
+  fclose(out_orientation);
+
+
   // print header of nonaffinity file
   if (me == 0){
     fprintf(out_nonaffinity, "# atom_id xy_nonaffinity\n");
@@ -448,11 +515,15 @@ void ComputeNonaffinity::solve_nonaffinity(){
 }
 void ComputeNonaffinity::solve_derivative(){
   int nlocal = atom->nlocal;
-  int me = comm->me;
   char str[MAXLINE];
   double *press_0 = new double[6];
+  double *e = new double[5];
+  double **press; 
+  double press_x[6] = {0.};
+  memory->create(press, 5, 6, "NONaffine_press");
+  memory->create(f_xxx,ndof, "Compute_nonaffinity:f_xxx");
   double * xvec = atom->x[0];
-  energy_press();
+  e[0] = energy_press(0);
   double *tmp = press_compute->vector;
   for (int i = 0; i < 6; ++i){
     press_0[i] = tmp[i];
@@ -471,40 +542,69 @@ void ComputeNonaffinity::solve_derivative(){
   }
   // print header of derivative file
   if (me == 0){
-    fprintf(out_deri, "# index f_xx pxx_x pyy_x pzz_x pxy_x pxz_x pyz_x\n");
+    fprintf(out_deri, "# index eigen f_xx f_xxx pxx_x pyy_x pzz_x pxy_x pxz_x pyz_x\n");
   }
   int ilocal;
   tagint tag;
-  double eps = 1.0e-7*atom->natoms;
+  double eps = 2.5e-6*atom->natoms; // Good in my case
+  //double eps = 1.0e-2;
+  double ieps = 1.0/eps;
+  double diff[5] = {0., -2.*eps, -1.*eps, 1.*eps, 2.*eps};
+  double f_xx;
   for (int i = 0; i < ndof; ++i){
-    for (int j = 0; j < ndof; ++j){
-      // get the id
-      tag = static_cast<tagint>(j/domain->dimension+1);
-      // get the index in atom->x
-      ilocal = atom->map(tag);
-      if (ilocal >=0 && ilocal < nlocal){
-	int n = ilocal*3;
-	int loc = n + j%domain->dimension;
-	xvec[loc] = x0[loc] + hessian[i*ndof+j]*eps;
+    for (int index = 1; index < 5; ++index){
+      for (int j = 0; j < ndof; ++j){
+        // get the id
+        tag = static_cast<tagint>(j/domain->dimension+1);
+        // get the index in atom->x
+        ilocal = atom->map(tag);
+        if (ilocal >=0 && ilocal < nlocal){
+  	  int n = ilocal*3;
+  	  int loc = n + j%domain->dimension;
+  	  xvec[loc] = x0[loc] + hessian[i*ndof+j]*diff[index];
+        }
+      }
+      e[index] = energy_press(0);
+      double * tmp = press_compute->vector;
+      for (int ii = 0; ii < 6; ++ii){
+	press[index][ii] = tmp[ii];
       }
     }
-    energy_press();
-    double * tmp = press_compute->vector;
-    pxx_x[i] = (tmp[0]-press_0[0])/eps;
-    pyy_x[i] = (tmp[1]-press_0[1])/eps;
-    pzz_x[i] = (tmp[2]-press_0[2])/eps;
-    pxy_x[i] = (tmp[3]-press_0[3])/eps;
-    pxz_x[i] = (tmp[4]-press_0[4])/eps;
-    pyz_x[i] = (tmp[5]-press_0[5])/eps;
-    fprintf(out_deri,"%i %10g %10g %10g %10g %10g %10g %10g\n", 
-	i, eigen[i], pxx_x[i], pyy_x[i], pzz_x[i], pxy_x[i], pxz_x[i], pyz_x[i]);
+    // solve third order derivative
+#define i_m2 1
+#define i_m1 2
+#define i_0  0
+#define i_1  3
+#define i_2  4
+    f_xxx[i] = (-1.*e[i_m2]+2.*e[i_m1]+0.*e[i_0]-2.*e[i_1]+e[i_2])/(2.*eps*eps*eps);
+    f_xx = (-1.*e[i_m2]+16.*e[i_m1]-30.*e[i_0]+16.*e[i_1]-1.*e[i_2])/(12.*eps*eps);
+    // solve stress gradient
+    //  http://web.media.mit.edu/~crtaylor/calculator.html
+    //  f_x = (-11*f[i+0]+18*f[i+1]-9*f[i+2]+2*f[i+3])/(6*1.0*h**1)
+    for (int ii = 0; ii < 6; ++ii) {
+      //press_x[i] = (-11.*press[0][i]+18.*press[1][i]-9.*press[2][i]+2.*press[3][i])/(6.*eps);
+      // f_x = (1*f[i-2]-8*f[i-1]+0*f[i+0]+8*f[i+1]-1*f[i+2])/(12*1.0*h**1)
+      press_x[ii] = (press[i_m2][ii]-8.*press[i_m1][ii]+8.*press[i_1][ii]-1.*press[i_2][ii])/(12.*eps);
+    }
+    pxx_x[i] = press_x[0];
+    pyy_x[i] = press_x[1];
+    pzz_x[i] = press_x[2];
+    pxy_x[i] = press_x[3];
+    pxz_x[i] = press_x[4];
+    pyz_x[i] = press_x[5];
+    fprintf(out_deri,"%i %10g %10g %10g %10g %10g %10g %10g %10g %10g\n", 
+  	i, eigen[i], f_xx, f_xxx[i], pxx_x[i], pyy_x[i], pzz_x[i], pxy_x[i], pxz_x[i], pyz_x[i]);
   }
   delete []press_0;
+  delete []e;
+  memory->destroy(press);
   // restore to the initial condition
   for(int ii = 0; ii < nlocal*3; ++ii){
     xvec[ii] = x0[ii];
   }
+  fclose(out_deri);
 }
+
 
 void ComputeNonaffinity::solve_eigen(){
   int ndof = atom->natoms * domain->dimension;
@@ -545,15 +645,41 @@ void ComputeNonaffinity::solve_eigen(){
   memory->destroy(work);
 
 }
-double ComputeNonaffinity::energy_press(){
+double ComputeNonaffinity::energy_press(int force_reneighbor){
   int eflag = 1;
   int vflag = 1;
 
-  int nflag = neighbor->decide();
-  if(nflag != 0){
+  if (force_reneighbor) {
+    double **x = atom->x;
+    imageint *image = atom->image;
+    int nlocal = atom->nlocal;
+    for (int i = 0; i < nlocal; ++i) domain->remap(x[i],image[i]);
     if (domain->triclinic) domain->x2lamda(atom->nlocal);
-    domain->pbc();
     domain->reset_box();
+    Irregular *irregular = new Irregular(lmp);
+    irregular->migrate_atoms(1);
+    delete irregular;
+    if (domain->triclinic) domain->lamda2x(atom->nlocal);
+  }
+  int nflag = neighbor->decide();
+  if (nflag == 0){
+    timer->stamp();
+    comm->forward_comm();
+    timer->stamp(Timer::COMM);
+  }else {
+    domain->pbc();
+    if (domain->box_change) {
+      domain->reset_box();
+      comm->setup();
+      if (neighbor->style) neighbor->setup_bins();
+    }
+    timer->stamp();
+    comm->exchange();
+    if (atom->sortfreq > 0 &&
+        update->ntimestep >= atom->nextsort) atom->sort();
+    comm->borders();
+    if (domain->triclinic) domain->lamda2x(atom->nlocal+atom->nghost);
+    timer->stamp(Timer::COMM);
     neighbor->build(1);
   }
 
